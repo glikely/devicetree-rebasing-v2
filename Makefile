@@ -86,8 +86,10 @@ ALL_DTS		:= $(shell find src/* -name \*.dts)
 
 ALL_DTB		:= $(patsubst %.dts,%.dtb,$(ALL_DTS))
 
-$(ALL_DTB): ARCH=$(word 2,$(subst /, ,$@))
-$(ALL_DTB): FORCE
+ALL_YAML	:= $(patsubst %.dts,%.dt.yaml,$(ALL_DTS))
+
+$(ALL_DTB) $(ALL_YAML): ARCH=$(word 2,$(subst /, ,$@))
+$(ALL_DTB) $(ALL_YAML): FORCE
 	$(Q)$(MAKE) ARCH=$(ARCH) $@
 
 else
@@ -95,6 +97,7 @@ else
 ARCH_DTS	:= $(shell find src/$(ARCH) -name \*.dts)
 
 ARCH_DTB	:= $(patsubst %.dts,%.dtb,$(ARCH_DTS))
+ARCH_YAML	:= $(patsubst %.dts,%.dt.yaml,$(ARCH_DTS))
 
 src	:= src/$(ARCH)
 obj	:= src/$(ARCH)
@@ -118,23 +121,29 @@ dtc_cpp_flags  = -Wp,-MD,$(depfile).pre.tmp -nostdinc		\
 
 quiet_cmd_dtc = DTC     $@
 cmd_dtc = $(CPP) $(dtc_cpp_flags) -x assembler-with-cpp -o $(dtc-tmp) $< ; \
-        $(DTC) -O dtb -o $@ -b 0 \
+        $(DTC) -O $(2) -o $@ -b 0 \
                 -i $(src) $(DTC_FLAGS) \
                 -d $(depfile).dtc.tmp $(dtc-tmp) ; \
         cat $(depfile).pre.tmp $(depfile).dtc.tmp > $(depfile)
 
 $(obj)/%.dtb: $(src)/%.dts FORCE
-	$(call if_changed_dep,dtc)
+	$(call if_changed_dep,dtc,dtb)
+
+$(obj)/%.dt.yaml: $(src)/%.dts FORCE
+	$(call if_changed_dep,dtc,yaml)
+
+$(obj)/%.validate: $(src)/%.dt.yaml FORCE
+	../yaml-bindings/dt-validate $<
 
 PHONY += all_arch
-all_arch: $(ARCH_DTB)
+all_arch: $(ARCH_DTB) $(ARCH_YAML)
 	@:
 
 RCS_FIND_IGNORE := \( -name SCCS -o -name BitKeeper -o -name .svn -o -name CVS \
                    -o -name .pc -o -name .hg -o -name .git \) -prune -o
 
 PHONY += clean_arch
-clean_arch: __clean-files = $(ARCH_DTB)
+clean_arch: __clean-files = $(ARCH_DTB) $(ARCH_YAML)
 clean_arch: FORCE
 	$(call cmd,clean)
 	@find . $(RCS_FIND_IGNORE) \
